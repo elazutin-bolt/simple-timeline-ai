@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Draggable & Resizable Timeline</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+    }
+
+    .timeline-container {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .timeline-scroll {
+      overflow-x: auto;
+      overflow-y: auto;
+    }
+
+    .timeline-grid {
+      display: grid;
+      grid-template-columns: 150px repeat(30, 120px);
+      min-width: max-content;
+      position: relative;
+    }
+
+    .timeline-corner {
+      background: #f4f4f4;
+      border-right: 1px solid #ccc;
+      padding: 10px;
+      font-weight: bold;
+      position: sticky;
+      top: 0;
+      left: 0;
+      z-index: 20;
+    }
+
+    .timeline-day {
+      text-align: center;
+      padding: 10px;
+      background-color: #f4f4f4;
+      border-left: 1px solid #ccc;
+      border-bottom: 1px solid #ccc;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      white-space: nowrap;
+    }
+
+    .timeline-category {
+      background: #fafafa;
+      border-right: 1px solid #ccc;
+      padding: 10px;
+      font-weight: bold;
+      position: sticky;
+      left: 0;
+      z-index: 101;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #eee;
+    }
+
+    .timeline-cell {
+      border-left: 1px solid #eee;
+      border-bottom: 1px solid #eee;
+      min-height: 80px;
+      position: relative;
+    }
+
+    .timeline-event {
+      background-color: #007bff;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      position: absolute;
+      top: 8px;
+      height: calc(100% - 16px);
+      box-sizing: border-box;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      z-index: 100;
+      cursor: grab;
+    }
+
+    .resize-handle {
+      width: 8px;
+      height: 100%;
+      position: absolute;
+      right: 0;
+      top: 0;
+      cursor: ew-resize;
+      background: rgba(255,255,255,0.3);
+    }
+
+    .dragging {
+      opacity: 0.8;
+      cursor: grabbing;
+    }
+  </style>
+</head>
+<body>
+
+<div class="timeline-container">
+  <div class="timeline-scroll">
+    <div id="timeline-grid" class="timeline-grid"></div>
+  </div>
+</div>
+
+<script>
+  const categories = [
+    { name: "Development", events: [{ start: 2, length: 3, title: "Feature A" }] },
+    { name: "Design", events: [{ start: 5, length: 4, title: "UI Revamp" }] },
+    { name: "Marketing", events: [{ start: 10, length: 2, title: "Ad Campaign" }] }
+  ];
+
+  const totalDays = 30;
+  const startDate = new Date();
+  const dayWidth = 120;
+
+  const grid = document.getElementById("timeline-grid");
+
+  // Header row
+  const corner = document.createElement("div");
+  corner.className = "timeline-corner";
+  corner.textContent = "Category";
+  grid.appendChild(corner);
+
+  for (let i = 0; i < totalDays; i++) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + i);
+    const label = `${date.toLocaleDateString('en-US', { weekday: 'short' })} ${date.getDate()}`;
+    const day = document.createElement("div");
+    day.className = "timeline-day";
+    day.textContent = label;
+    grid.appendChild(day);
+  }
+
+  // Rows
+  categories.forEach((category, catIdx) => {
+    const catCell = document.createElement("div");
+    catCell.className = "timeline-category";
+    catCell.textContent = category.name;
+    grid.appendChild(catCell);
+
+    for (let day = 1; day <= totalDays; day++) {
+      const cell = document.createElement("div");
+      cell.className = "timeline-cell";
+
+      const event = category.events.find(e => e.start === day);
+      if (event) {
+        const eventDiv = document.createElement("div");
+        eventDiv.className = "timeline-event";
+        eventDiv.setAttribute("data-category", catIdx);
+        eventDiv.setAttribute("data-start", event.start);
+        eventDiv.setAttribute("data-length", event.length);
+        eventDiv.style.left = "0px";
+        eventDiv.style.width = `${event.length * dayWidth}px`;
+        eventDiv.style.transform = `translateX(${(event.start - 1) * dayWidth}px)`;
+        eventDiv.textContent = event.title;
+
+        // Resize handle
+        const handle = document.createElement("div");
+        handle.className = "resize-handle";
+        eventDiv.appendChild(handle);
+
+        // Add drag/resize listeners
+        enableDragAndResize(eventDiv);
+
+        cell.appendChild(eventDiv);
+      }
+
+      grid.appendChild(cell);
+    }
+  });
+
+  function enableDragAndResize(el) {
+    let startX, startLeft, startWidth;
+    let isDragging = false;
+    let isResizing = false;
+
+    const handle = el.querySelector(".resize-handle");
+
+    // Drag
+    el.addEventListener("mousedown", (e) => {
+      if (e.target === handle) return;
+      isDragging = true;
+      el.classList.add("dragging");
+      startX = e.clientX;
+      startLeft = parseInt(el.style.transform.replace("translateX(", "").replace("px)", ""), 10);
+      document.addEventListener("mousemove", drag);
+      document.addEventListener("mouseup", stopAction);
+    });
+
+    // Resize
+    handle.addEventListener("mousedown", (e) => {
+      isResizing = true;
+      e.stopPropagation();
+      startX = e.clientX;
+      startWidth = parseInt(el.style.width, 10);
+      document.addEventListener("mousemove", resize);
+      document.addEventListener("mouseup", stopAction);
+    });
+
+    function drag(e) {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const steps = Math.round(dx / dayWidth);
+      const newLeft = startLeft + steps * dayWidth;
+      el.style.transform = `translateX(${newLeft}px)`;
+    }
+
+    function resize(e) {
+      if (!isResizing) return;
+      const dx = e.clientX - startX;
+      const steps = Math.round(dx / dayWidth);
+      const newWidth = Math.max(dayWidth, startWidth + steps * dayWidth);
+      el.style.width = `${newWidth}px`;
+    }
+
+    function stopAction() {
+      isDragging = false;
+      isResizing = false;
+      el.classList.remove("dragging");
+      document.removeEventListener("mousemove", drag);
+      document.removeEventListener("mousemove", resize);
+      document.removeEventListener("mouseup", stopAction);
+    }
+  }
+</script>
+
+</body>
+</html>
